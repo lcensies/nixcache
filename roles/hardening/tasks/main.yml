@@ -71,3 +71,26 @@
 - name: Enable UFW
   community.general.ufw:
     state: enabled
+
+# ufw-docker fix — prevent Docker from bypassing UFW iptables rules
+# https://github.com/chaifeng/ufw-docker
+- name: Download ufw-docker script
+  ansible.builtin.get_url:
+    url: https://github.com/chaifeng/ufw-docker/raw/master/ufw-docker
+    dest: /usr/local/bin/ufw-docker
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Check if ufw-docker rules are already applied
+  ansible.builtin.command:
+    cmd: grep -q "BEGIN UFW AND DOCKER" /etc/ufw/after.rules
+  register: ufw_docker_check
+  changed_when: false
+  failed_when: false
+
+- name: Apply ufw-docker fix to after.rules
+  ansible.builtin.command:
+    cmd: ufw-docker install
+  when: ufw_docker_check.rc != 0
+  notify: Reload UFW
