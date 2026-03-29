@@ -10,3 +10,13 @@ services:
 {% if domain_name != "" %}
       - {{ traefik_config_dir }}/acme.json:/etc/traefik/acme.json
 {% endif %}
+
+  nginx:
+    image: nginx:alpine
+    restart: unless-stopped
+    volumes:
+      - {{ traefik_config_dir }}/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - {{ traefik_config_dir }}/www:/usr/share/nginx/html:ro
+      - {{ nginx_cache_dir }}:{{ nginx_cache_dir }}
+    ports:
+      - "127.0.0.1:8081:8080"

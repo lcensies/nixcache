@@ -45,6 +45,14 @@
   changed_when: "'overwrite' not in collections_result.stdout and 'already installed' not in collections_result.stdout"
   notify: Restart crowdsec
 
+
+- name: Configure CrowdSec LAPI to listen on localhost
+  ansible.builtin.lineinfile:
+    path: /etc/crowdsec/config.yaml
+    regexp: '^\s*listen_uri:'
+    line: "    listen_uri: localhost:8080"
+  notify: Restart crowdsec
+
 - name: Deploy AppSec acquisition config
   ansible.builtin.template:
     src: acquis-appsec.yaml.j2

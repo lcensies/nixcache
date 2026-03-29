@@ -1,0 +1,77 @@
+proxy_cache_path {{ nginx_cache_dir }}
+    levels=1:2
+    keys_zone=nix:20m
+    max_size={{ nginx_cache_max_bytes }}
+    inactive=180d
+    use_temp_path=off;
+
+server {
+    listen 8080;
+
+    # Frontend
+    location = / {
+        root /usr/share/nginx/html;
+        index index.html;
+    }
+
+    location = /index.html {
+        root /usr/share/nginx/html;
+    }
+
+    location ~* \.(css|js|ico|png|jpg|svg|woff2?)$ {
+        root /usr/share/nginx/html;
+        expires 30d;
+    }
+
+    # Nix channels proxy — rewrites Location so nix follows redirect through us
+    location /channels/ {
+        proxy_pass https://channels.nixos.org/;
+        proxy_ssl_server_name on;
+        proxy_set_header Host channels.nixos.org;
+
+        proxy_redirect https://releases.nixos.org/ https://{{ domain_name }}/releases/;
+
+        proxy_cache nix;
+        proxy_cache_valid 200 1h;
+        proxy_cache_valid 301 302 1h;
+        proxy_cache_use_stale error timeout updating http_500 http_502 http_503 http_504;
+        proxy_cache_lock on;
+
+        add_header X-Cache-Status $upstream_cache_status always;
+        add_header X-Served-By nixcache.ru always;
+    }
+
+    # Nix releases proxy (nixexprs tarballs, store-paths, etc.)
+    location /releases/ {
+        proxy_pass https://releases.nixos.org/;
+        proxy_ssl_server_name on;
+        proxy_set_header Host releases.nixos.org;
+
+        proxy_cache nix;
+        proxy_cache_valid 200 30d;
+        proxy_cache_valid 301 302 1h;
+        proxy_cache_use_stale error timeout updating http_500 http_502 http_503 http_504;
+        proxy_cache_lock on;
+        proxy_cache_lock_timeout 300s;
+
+        add_header X-Cache-Status $upstream_cache_status always;
+        add_header X-Served-By nixcache.ru always;
+    }
+
+    # Nix binary cache proxy
+    location / {
+        proxy_pass {{ nginx_upstream }};
+        proxy_ssl_server_name on;
+        proxy_set_header Host cache.nixos.org;
+
+        proxy_cache nix;
+        proxy_cache_valid 200 180d;
+        proxy_cache_valid 404 1m;
+        proxy_cache_use_stale error timeout updating http_500 http_502 http_503 http_504;
+        proxy_cache_lock on;
+        proxy_cache_lock_timeout 10s;
+
+        add_header X-Cache-Status $upstream_cache_status always;
+        add_header X-Served-By nixcache.ru always;
+    }
+}

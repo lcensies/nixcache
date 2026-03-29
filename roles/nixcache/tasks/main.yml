@@ -1,0 +1,160 @@
+- name: Stop and disable system nginx (conflicts with traefik on port 80)
+  ansible.builtin.service:
+    name: nginx
+    state: stopped
+    enabled: false
+  failed_when: false
+
+- name: Install lvm2
+  ansible.builtin.package:
+    name: lvm2
+    state: present
+  when: cache_disk != ""
+
+- name: Create physical volume
+  ansible.builtin.command:
+    cmd: pvcreate {{ cache_disk }}
+  register: pvcreate_result
+  changed_when: "'successfully created' in pvcreate_result.stdout"
+  failed_when: pvcreate_result.rc != 0 and 'already exists' not in pvcreate_result.stderr
+  when: cache_disk != ""
+
+- name: Create volume group
+  ansible.builtin.command:
+    cmd: vgcreate {{ cache_vg }} {{ cache_disk }}
+  register: vgcreate_result
+  changed_when: "'successfully created' in vgcreate_result.stdout"
+  failed_when: vgcreate_result.rc != 0 and 'already exists' not in vgcreate_result.stderr
+  when: cache_disk != ""
+
+- name: Create logical volume (100% of VG)
+  ansible.builtin.command:
+    cmd: lvcreate -l 100%VG -n {{ cache_lv }} {{ cache_vg }}
+  register: lvcreate_result
+  changed_when: "'created' in lvcreate_result.stdout"
+  failed_when: lvcreate_result.rc != 0 and 'already exists' not in lvcreate_result.stderr
+  when: cache_disk != ""
+
+- name: Format logical volume as ext4
+  ansible.builtin.command:
+    cmd: mkfs.ext4 /dev/{{ cache_vg }}/{{ cache_lv }}
+  when:
+    - cache_disk != ""
+    - lvcreate_result.changed
+
+- name: Create cache mount point
+  ansible.builtin.file:
+    path: "{{ nginx_cache_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Mount LVM volume
+  ansible.posix.mount:
+    path: "{{ nginx_cache_dir }}"
+    src: "/dev/{{ cache_vg }}/{{ cache_lv }}"
+    fstype: ext4
+    opts: defaults
+    state: mounted
+  when: cache_disk != ""
+
+- name: Get disk size for cache directory
+  ansible.builtin.command:
+    cmd: df --output=size -B1 {{ nginx_cache_dir }}
+  register: df_cache
+  changed_when: false
+
+- name: Calculate nginx cache max size (85% of disk)
+  ansible.builtin.set_fact:
+    nginx_cache_max_bytes: "{{ (df_cache.stdout_lines[1] | trim | int * 0.85) | int }}"
+
+# --- Traefik ---
+
+- name: Create Traefik log directory
+  ansible.builtin.file:
+    path: /var/log/traefik
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Create Traefik config directory
+  ansible.builtin.file:
+    path: "{{ traefik_config_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Create acme.json for Let's Encrypt
+  ansible.builtin.file:
+    path: "{{ traefik_config_dir }}/acme.json"
+    state: touch
+    owner: root
+    group: root
+    mode: "0600"
+    modification_time: preserve
+    access_time: preserve
+  when: domain_name != ""
+
+- name: Deploy Traefik static config
+  ansible.builtin.template:
+    src: traefik.yml.j2
+    dest: "{{ traefik_config_dir }}/traefik.yml"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart traefik
+
+- name: Deploy Traefik dynamic config
+  ansible.builtin.template:
+    src: dynamic.yml.j2
+    dest: "{{ traefik_config_dir }}/dynamic.yml"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart traefik
+
+# --- nginx ---
+
+- name: Deploy nginx config
+  ansible.builtin.template:
+    src: nginx.conf.j2
+    dest: "{{ traefik_config_dir }}/nginx.conf"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart traefik
+
+- name: Create frontend www directory
+  ansible.builtin.file:
+    path: "{{ traefik_config_dir }}/www"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Deploy frontend index page
+  ansible.builtin.template:
+    src: index.html.j2
+    dest: "{{ traefik_config_dir }}/www/index.html"
+    owner: root
+    group: root
+    mode: "0644"
+
+# --- Docker Compose ---
+
+- name: Deploy docker-compose file
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ traefik_config_dir }}/docker-compose.yml"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart traefik
+
+- name: Start services
+  ansible.builtin.command:
+    cmd: docker compose -f {{ traefik_config_dir }}/docker-compose.yml up -d
+  changed_when: false

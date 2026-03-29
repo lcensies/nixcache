@@ -1,13 +1,4 @@
 ---
-- name: Reload systemd
-  ansible.builtin.systemd:
-    daemon_reload: true
-
-- name: Restart harmonia
-  ansible.builtin.systemd:
-    name: harmonia
-    state: restarted
-
 - name: Restart traefik
   ansible.builtin.command:
     cmd: docker compose -f {{ traefik_config_dir }}/docker-compose.yml up -d --force-recreate

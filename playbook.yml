@@ -1,5 +1,5 @@
 ---
-- name: Deploy Nix binary cache (harmonia) to nixcache hosts
+- name: Deploy Nix binary cache proxy to nixcache hosts
   hosts: nixcache
   gather_facts: true
 
@@ -13,4 +13,4 @@
         docker_install_compose_plugin: true
         docker_install_compose: false
     - crowdsec
-    - harmonia
+    - nixcache

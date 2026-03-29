@@ -1,0 +1,16 @@
+---
+traefik_config_dir: "/etc/traefik"
+traefik_image: "traefik:v3.3"
+nginx_cache_dir: "/var/cache/nix"
+nginx_upstream: "https://cache.nixos.org"
+
+# LVM: set to block device (e.g. "/dev/sdb") to create a dedicated LVM volume
+# for the cache directory. Leave empty to use the root disk.
+cache_disk: ""
+cache_vg: "nixcache_vg"
+cache_lv: "nixcache_lv"
+
+# Set domain_name to enable HTTPS + Let's Encrypt (e.g. "nixcache.ru")
+domain_name: ""
+# Required when domain_name is set
+acme_email: ""

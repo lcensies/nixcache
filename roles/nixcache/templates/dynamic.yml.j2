@@ -6,14 +6,14 @@ http:
           enabled: true
           crowdsecMode: stream
           crowdsecLapiKey: "{{ crowdsec_bouncer_api_key }}"
-          crowdsecLapiHost: "127.0.0.1:8080"
+          crowdsecLapiHost: "localhost:8080"
           crowdsecAppsecEnabled: true
-          crowdsecAppsecHost: "127.0.0.1:7422"
+          crowdsecAppsecHost: "localhost:7422"
           crowdsecAppsecFailureBlock: true
           crowdsecAppsecUnreachableBlock: false
 
   routers:
-    harmonia:
+    nginx:
 {% if domain_name != "" %}
       rule: "Host(`{{ domain_name }}`)"
       entryPoints:
@@ -27,11 +27,11 @@ http:
 {% endif %}
       middlewares:
         - crowdsec
-      service: harmonia
+      service: nginx
 
   services:
-    harmonia:
+    nginx:
       loadBalancer:
         servers:
-          - url: "http://{{ harmonia_bind }}:{{ harmonia_port }}"
-        passHostHeader: true
+          - url: "http://localhost:8081"
+        passHostHeader: false
