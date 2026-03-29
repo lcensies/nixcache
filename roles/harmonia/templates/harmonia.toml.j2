@@ -1,0 +1,7 @@
+bind = "{{ harmonia_bind }}:{{ harmonia_port }}"
+workers = {{ harmonia_workers }}
+max_connection_rate = 256
+priority = 30
+
+[signing_keys]
+{{ cache_name }} = "{{ signing_key_private }}"

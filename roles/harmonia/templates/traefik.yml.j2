@@ -1,0 +1,40 @@
+api:
+  dashboard: false
+  insecure: false
+
+entryPoints:
+  web:
+    address: ":80"
+{% if domain_name != "" %}
+    http:
+      redirections:
+        entryPoint:
+          to: websecure
+          scheme: https
+  websecure:
+    address: ":443"
+{% endif %}
+
+accessLog:
+  filePath: /var/log/traefik/access.log
+
+providers:
+  file:
+    filename: /etc/traefik/dynamic.yml
+    watch: true
+
+experimental:
+  plugins:
+    bouncer:
+      moduleName: github.com/maxlerebourg/crowdsec-bouncer-traefik-plugin
+      version: "{{ crowdsec_bouncer_plugin_version }}"
+
+{% if domain_name != "" %}
+certificatesResolvers:
+  letsencrypt:
+    acme:
+      email: "{{ acme_email }}"
+      storage: /etc/traefik/acme.json
+      httpChallenge:
+        entryPoint: web
+{% endif %}

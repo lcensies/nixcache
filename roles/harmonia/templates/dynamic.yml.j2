@@ -1,0 +1,37 @@
+http:
+  middlewares:
+    crowdsec:
+      plugin:
+        bouncer:
+          enabled: true
+          crowdsecMode: stream
+          crowdsecLapiKey: "{{ crowdsec_bouncer_api_key }}"
+          crowdsecLapiHost: "127.0.0.1:8080"
+          crowdsecAppsecEnabled: true
+          crowdsecAppsecHost: "127.0.0.1:7422"
+          crowdsecAppsecFailureBlock: true
+          crowdsecAppsecUnreachableBlock: false
+
+  routers:
+    harmonia:
+{% if domain_name != "" %}
+      rule: "Host(`{{ domain_name }}`)"
+      entryPoints:
+        - websecure
+      tls:
+        certResolver: letsencrypt
+{% else %}
+      rule: "PathPrefix(`/`)"
+      entryPoints:
+        - web
+{% endif %}
+      middlewares:
+        - crowdsec
+      service: harmonia
+
+  services:
+    harmonia:
+      loadBalancer:
+        servers:
+          - url: "http://{{ harmonia_bind }}:{{ harmonia_port }}"
+        passHostHeader: true

@@ -1,0 +1,122 @@
+---
+- name: Generate nix cache signing key
+  ansible.builtin.command:
+    cmd: nix-store --generate-binary-cache-key {{ cache_name }} {{ signing_key_private }} {{ signing_key_public }}
+    creates: "{{ signing_key_private }}"
+
+- name: Set permissions on private signing key
+  ansible.builtin.file:
+    path: "{{ signing_key_private }}"
+    owner: root
+    group: root
+    mode: "0600"
+
+- name: Check if harmonia is already installed
+  ansible.builtin.command: which harmonia
+  register: harmonia_check
+  changed_when: false
+  failed_when: false
+  environment:
+    PATH: "/root/.nix-profile/bin:/usr/local/bin:/usr/bin:/bin"
+
+- name: Install harmonia via nix profile
+  ansible.builtin.command:
+    cmd: nix --extra-experimental-features "nix-command flakes" profile install nixpkgs#harmonia
+  environment:
+    PATH: "/root/.nix-profile/bin:/usr/local/bin:/usr/bin:/bin"
+  when: harmonia_check.rc != 0
+
+- name: Resolve harmonia binary path
+  ansible.builtin.command: which harmonia
+  register: harmonia_bin
+  changed_when: false
+  environment:
+    PATH: "/root/.nix-profile/bin:/usr/local/bin:/usr/bin:/bin"
+
+- name: Deploy harmonia config
+  ansible.builtin.template:
+    src: harmonia.toml.j2
+    dest: /etc/harmonia.toml
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart harmonia
+
+- name: Deploy harmonia systemd unit
+  ansible.builtin.template:
+    src: harmonia.service.j2
+    dest: /etc/systemd/system/harmonia.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - Reload systemd
+    - Restart harmonia
+
+- name: Enable and start harmonia
+  ansible.builtin.systemd:
+    name: harmonia
+    enabled: true
+    state: started
+    daemon_reload: true
+
+# --- Traefik ---
+
+- name: Create Traefik log directory
+  ansible.builtin.file:
+    path: /var/log/traefik
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Create Traefik config directory
+  ansible.builtin.file:
+    path: "{{ traefik_config_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Create acme.json for Let's Encrypt
+  ansible.builtin.file:
+    path: "{{ traefik_config_dir }}/acme.json"
+    state: touch
+    owner: root
+    group: root
+    mode: "0600"
+    modification_time: preserve
+    access_time: preserve
+  when: domain_name != ""
+
+- name: Deploy Traefik static config
+  ansible.builtin.template:
+    src: traefik.yml.j2
+    dest: "{{ traefik_config_dir }}/traefik.yml"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart traefik
+
+- name: Deploy Traefik dynamic config
+  ansible.builtin.template:
+    src: dynamic.yml.j2
+    dest: "{{ traefik_config_dir }}/dynamic.yml"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart traefik
+
+- name: Deploy Traefik docker-compose file
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ traefik_config_dir }}/docker-compose.yml"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart traefik
+
+- name: Start Traefik
+  ansible.builtin.command:
+    cmd: docker compose -f {{ traefik_config_dir }}/docker-compose.yml up -d
+  changed_when: false

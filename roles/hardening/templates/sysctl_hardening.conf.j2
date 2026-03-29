@@ -1,0 +1,30 @@
+# Prevent SYN flood attacks
+net.ipv4.tcp_syncookies = 1
+
+# Reverse path filtering — drop spoofed packets
+net.ipv4.conf.all.rp_filter = 1
+net.ipv4.conf.default.rp_filter = 1
+
+# Ignore ICMP redirects
+net.ipv4.conf.all.accept_redirects = 0
+net.ipv4.conf.default.accept_redirects = 0
+net.ipv6.conf.all.accept_redirects = 0
+net.ipv6.conf.default.accept_redirects = 0
+
+# Don't send redirects
+net.ipv4.conf.all.send_redirects = 0
+net.ipv4.conf.default.send_redirects = 0
+
+# Ignore broadcast ICMP (smurf attack mitigation)
+net.ipv4.icmp_echo_ignore_broadcasts = 1
+
+# Log martian packets
+net.ipv4.conf.all.log_martians = 1
+
+# Disable IP source routing
+net.ipv4.conf.all.accept_source_route = 0
+net.ipv6.conf.all.accept_source_route = 0
+
+# Disable IPv6 if not needed (comment out if you use IPv6)
+net.ipv6.conf.all.disable_ipv6 = 1
+net.ipv6.conf.default.disable_ipv6 = 1

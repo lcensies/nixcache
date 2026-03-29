@@ -1,0 +1,16 @@
+[Unit]
+Description=Harmonia - Nix binary cache server
+After=network.target
+
+[Service]
+Type=simple
+ExecStart={{ harmonia_bin.stdout }} -c /etc/harmonia.toml
+Restart=on-failure
+RestartSec=5
+Environment="NIX_REMOTE=daemon"
+Environment="PATH=/root/.nix-profile/bin:/usr/local/bin:/usr/bin:/bin"
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

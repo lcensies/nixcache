@@ -1,0 +1,16 @@
+---
+- name: Deploy Nix binary cache (harmonia) to nixcache hosts
+  hosts: nixcache
+  gather_facts: true
+
+  roles:
+    - hardening
+    - role: giovtorres.tuned
+      vars:
+        tuned_active_builtin_profile: network-throughput
+    - role: geerlingguy.docker
+      vars:
+        docker_install_compose_plugin: true
+        docker_install_compose: false
+    - crowdsec
+    - harmonia

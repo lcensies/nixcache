@@ -1,0 +1,12 @@
+services:
+  traefik:
+    image: {{ traefik_image }}
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - {{ traefik_config_dir }}/traefik.yml:/etc/traefik/traefik.yml:ro
+      - {{ traefik_config_dir }}/dynamic.yml:/etc/traefik/dynamic.yml:ro
+      - /var/log/traefik:/var/log/traefik
+{% if domain_name != "" %}
+      - {{ traefik_config_dir }}/acme.json:/etc/traefik/acme.json
+{% endif %}

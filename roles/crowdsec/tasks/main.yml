@@ -1,0 +1,94 @@
+---
+- name: Install CrowdSec dependencies
+  ansible.builtin.apt:
+    name:
+      - curl
+      - gnupg
+      - apt-transport-https
+    state: present
+
+- name: Add CrowdSec GPG key
+  ansible.builtin.shell:
+    cmd: >
+      curl -fsSL https://packagecloud.io/crowdsec/crowdsec/gpgkey |
+      gpg --dearmor -o /etc/apt/keyrings/crowdsec_crowdsec-archive-keyring.gpg
+    creates: /etc/apt/keyrings/crowdsec_crowdsec-archive-keyring.gpg
+
+- name: Add CrowdSec apt repository
+  ansible.builtin.copy:
+    dest: /etc/apt/sources.list.d/crowdsec_crowdsec.list
+    content: |
+      deb [signed-by=/etc/apt/keyrings/crowdsec_crowdsec-archive-keyring.gpg] https://packagecloud.io/crowdsec/crowdsec/any any main
+      deb-src [signed-by=/etc/apt/keyrings/crowdsec_crowdsec-archive-keyring.gpg] https://packagecloud.io/crowdsec/crowdsec/any any main
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Install CrowdSec
+  ansible.builtin.apt:
+    name: crowdsec
+    state: present
+    update_cache: true
+  notify: Restart crowdsec
+
+- name: Ensure CrowdSec is started and enabled
+  ansible.builtin.systemd:
+    name: crowdsec
+    enabled: true
+    state: started
+
+- name: Install CrowdSec collections
+  ansible.builtin.command:
+    cmd: cscli collections install {{ item }}
+  loop: "{{ crowdsec_collections }}"
+  register: collections_result
+  changed_when: "'overwrite' not in collections_result.stdout and 'already installed' not in collections_result.stdout"
+  notify: Restart crowdsec
+
+- name: Deploy AppSec acquisition config
+  ansible.builtin.template:
+    src: acquis-appsec.yaml.j2
+    dest: /etc/crowdsec/acquis.d/appsec.yaml
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart crowdsec
+
+- name: Deploy Traefik log acquisition config
+  ansible.builtin.template:
+    src: acquis-traefik.yaml.j2
+    dest: /etc/crowdsec/acquis.d/traefik.yaml
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart crowdsec
+
+# --- Traefik bouncer API key ---
+
+- name: Check existing CrowdSec bouncers
+  ansible.builtin.command: cscli bouncers list -o json
+  register: bouncers_list
+  changed_when: false
+
+- name: Add Traefik bouncer
+  ansible.builtin.command: cscli bouncers add traefik-bouncer -o raw
+  register: bouncer_key_result
+  when: "'traefik-bouncer' not in bouncers_list.stdout"
+
+- name: Save bouncer API key to file
+  ansible.builtin.copy:
+    content: "{{ bouncer_key_result.stdout | trim }}"
+    dest: "{{ crowdsec_bouncer_key_file }}"
+    owner: root
+    group: root
+    mode: "0600"
+  when: bouncer_key_result is changed
+
+- name: Read bouncer API key
+  ansible.builtin.slurp:
+    src: "{{ crowdsec_bouncer_key_file }}"
+  register: bouncer_key_slurp
+
+- name: Set bouncer API key fact
+  ansible.builtin.set_fact:
+    crowdsec_bouncer_api_key: "{{ bouncer_key_slurp.content | b64decode | trim }}"
