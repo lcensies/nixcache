@@ -1,7 +1,44 @@
 ---
+# Play 1: Generate local deploy keypair if it doesn't exist yet
+- name: Generate local deploy SSH keypair
+  hosts: localhost
+  connection: local
+  gather_facts: true
+  tasks:
+    - name: Generate ~/.ssh/ansible_deploy keypair
+      ansible.builtin.command:
+        cmd: >
+          ssh-keygen -t ed25519
+          -f {{ ansible_env.HOME }}/.ssh/ansible_deploy
+          -N ""
+          -C ansible-deploy
+        creates: "{{ ansible_env.HOME }}/.ssh/ansible_deploy"
+
+# Play 2: Bootstrap deploy user (runs as root — first-time server setup)
+# cogini.users creates the user, adds it to the admin group, and writes
+# /etc/sudoers.d/00-admin with NOPASSWD for that group.
+- name: Bootstrap deploy user
+  hosts: nixcache
+  gather_facts: true  # required by cogini.users for OS detection
+  vars:
+    ansible_user: root
+    ansible_ssh_private_key_file: "{{ lookup('env', 'HOME') }}/.ssh/tw_kek"
+    users_global_admin_users:
+      - "{{ deploy_user }}"
+    users_users:
+      - user: "{{ deploy_user }}"
+        key: "{{ lookup('env', 'HOME') }}/.ssh/ansible_deploy.pub"
+  roles:
+    - cogini.users
+
+# Play 3: Full deployment as deploy user (become for privileged tasks)
 - name: Deploy Nix binary cache proxy to nixcache hosts
   hosts: nixcache
   gather_facts: true
+  vars:
+    ansible_user: "{{ deploy_user }}"
+    ansible_ssh_private_key_file: "{{ lookup('env', 'HOME') }}/.ssh/ansible_deploy"
+  become: true
 
   roles:
     - hardening

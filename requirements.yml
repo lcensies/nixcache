@@ -4,6 +4,8 @@ roles:
     version: "2.0.2"
   - name: geerlingguy.docker
     version: "7.4.5"
+  - name: cogini.users
+    src: https://github.com/cogini/ansible-role-users
 
 collections:
   - name: ansible.posix
